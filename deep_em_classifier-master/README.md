@@ -67,6 +67,67 @@ See `requirements.txt`, or use `pip install -r requirements.txt` directly.
 
 The files in this repository provide the interface to our 1D CNN-BLSTM eye movement classification model.
 
+## PyTorch intoxication classification pipeline
+
+The repository now also contains `pytorch_end_to_end.py`, a standalone PyTorch
+script for end-to-end intoxication prediction from per-frame gaze features. The
+script is designed around CSV inputs that mirror the columns you described:
+
+```
+timestamp,gaze-gazeH-velocity,gaze-azimuthH-velocity,gaze-elevationH-velocity,
+gaze-directionH-velocity,eye-right_eye_opening_percent,eye-right_eye_confidence,
+groundtruth+phase+
+```
+
+Key expectations:
+
+* Each row corresponds to one timestamped sample in your recording.
+* The final column `groundtruth+phase+` is the class label (e.g. 0, 1, 2).
+* If you have more than one recording, add a `sequence_id` column so the script
+  knows where each sequence starts and ends. When the column is missing the
+  entire file is treated as a single sequence automatically.
+* Any other numeric columns in the CSV are treated as model features unless you
+  explicitly list them via `--feature-columns`.
+
+Install the minimal dependencies with:
+
+```bash
+pip install torch pandas numpy
+```
+
+Training performs sliding-window extraction, normalises the features, and saves
+both the best checkpoint and the associated configuration (normalisation stats,
+feature list, label mapping, aggregation strategy) for reproducible evaluation
+and inference. Typical commands are:
+
+```bash
+# Train a new model
+python pytorch_end_to_end.py train \
+  --data data/intox_samples.csv \
+  --output-dir outputs/intox_model \
+  --window-size 256 \
+  --window-stride 64 \
+  --epochs 30 \
+  --batch-size 64
+
+# Evaluate or run inference with the saved checkpoint
+python pytorch_end_to_end.py evaluate \
+  --data data/holdout.csv \
+  --checkpoint outputs/intox_model/model.pt \
+  --config outputs/intox_model/config.json
+```
+
+The CLI also includes a `predict` sub-command that exports per-window
+probabilities for new data. Refer to `python pytorch_end_to_end.py --help` for
+the complete list of options, including:
+
+* `--label-column` (defaults to `groundtruth+phase+`) and
+  `--label-aggregation` (defaults to majority vote per sequence) so you can
+  adapt the workflow to other labelling conventions.
+* `--feature-columns` to select a subset of the CSV columns when you want to
+  exclude auxiliary values such as timestamps.
+* `--sequence-column` if your recordings use a custom identifier field.
+
 `blstm_model.py` is the main script that contains all the necessary tools to train and test the model (currently -- on GazeCom).
 
 ## Testing the model on your data
